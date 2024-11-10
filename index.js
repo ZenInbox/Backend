@@ -30,8 +30,10 @@ app.get("/", (req, res) => {
 connectToMongo();
 
 const UserRouter = require("./Routes/User");
-
 app.use("/api/user", UserRouter.router);
+
+const EmailRouter = require("./Routes/Email")
+app.use("/api/email", EmailRouter.router);
 
 app.listen(PORT, () => {
     console.log(`Server running on Port ${PORT}`);
