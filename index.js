@@ -7,13 +7,13 @@ dotenv.config();
 
 const app = express();
 app.use(cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173" , "https://zeninboxs.pages.dev"],
     methods: ['POST', 'DELETE', 'GET', 'PUT', 'PATCH'],
     credentials: true
 }));
 
 app.options("", cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173" , "https://zeninboxs.pages.dev"],
     methods: ['POST', 'DELETE', 'GET', 'PUT', 'PATCH'],
     credentials: true
 }));
