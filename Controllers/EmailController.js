@@ -1,6 +1,6 @@
 const User = require("../Models/User")
-const ScheduledEmails = require('../models/ScheduledEmails');
-const Email = require('../models/Email');
+const ScheduledEmails = require('../Models/ScheduledEmails');
+const Email = require('../Models/Email');
 const { google } = require("googleapis");
 
 exports.sendEmail = async (req, res) => {
