@@ -1,71 +1,191 @@
 const User = require("../Models/User")
 const ScheduledEmails = require('../Models/ScheduledEmails');
 const Email = require('../Models/Email');
+const EmailLogs = require("../Models/EmailLogs")
 const { google } = require("googleapis");
+const mongoose = require("mongoose")
+
+// exports.sendEmail = async (req, res) => {
+//     try {
+//       const { sender, recipients, subject, body, attachments, accessToken, refreshToken } = req.body;
+   
+//       const senderUser = await User.findOne({ email: sender });
+  
+//       if (!senderUser) {
+//         return res.status(404).json({ message: 'Sender not found in database' });
+//       }
+  
+//       // Initializing the Gmail API client
+//       const oauth2Client = new google.auth.OAuth2(
+//         process.env.CLIENT_ID, process.env.CLIENT_SECRET
+//       );
+
+//       oauth2Client.setCredentials({ access_token: accessToken });
+  
+//       const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+  
+//       // Format email content as base64 encoded message
+//       const emailContent = [
+//         `From: ${senderUser.email}`,
+//         `To: ${recipients.join(',')}`,
+//         `Subject: ${subject}`,
+//         'Content-Type: text/html; charset=UTF-8',
+//         '',
+//         `<html><body>${body}</body></html>`,
+//     ].join('\n');
+  
+//       const encodedMessage = Buffer.from(emailContent)
+//         .toString('base64')
+//         .replace(/\+/g, '-')
+//         .replace(/\//g, '_')
+//         .replace(/=+$/, '');
+  
+//       // Sending the email using the Gmail API
+//       const result = await gmail.users.messages.send({
+//         userId: 'me',
+//         requestBody: {
+//           raw: encodedMessage,
+//         },
+//       });
+  
+//       const newEmail = new Email({
+//         sender: senderUser._id,
+//         recipients,
+//         subject,
+//         body,
+//         attachments,
+//         status: 'sent',
+//       });
+//       await newEmail.save();
+  
+//       res.status(200).json({ 
+//         message: 'Email sent successfully', 
+//         email: newEmail, 
+//         emailInfo: result.data 
+//       });
+  
+//     } catch (error) {
+//       console.log(error)
+//       res.status(500).json({ message: 'Error sending email', error: error.message });
+//     }
+// };
+  
+
+
+
 
 exports.sendEmail = async (req, res) => {
-    try {
-      const { sender, recipients, subject, body, attachments, accessToken, refreshToken } = req.body;
-  
+  try {
+      const { sender, recipients, subject, body, attachments, accessToken } = req.body;
+
       const senderUser = await User.findOne({ email: sender });
-  
+
       if (!senderUser) {
-        return res.status(404).json({ message: 'Sender not found in database' });
+          return res.status(404).json({ message: "Sender not found in database" });
       }
-  
-      // Initializing the Gmail API client
+
+      // Initialize the Gmail API client
       const oauth2Client = new google.auth.OAuth2(
-        process.env.CLIENT_ID, process.env.CLIENT_SECRET
+          process.env.CLIENT_ID,
+          process.env.CLIENT_SECRET
       );
 
       oauth2Client.setCredentials({ access_token: accessToken });
-  
-      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
-  
-      // Format email content as base64 encoded message
-      const emailContent = [
-        `From: ${senderUser.email}`,
-        `To: ${recipients.join(',')}`,
-        `Subject: ${subject}`,
-        '',
-        body,
-      ].join('\n');
-  
-      const encodedMessage = Buffer.from(emailContent)
-        .toString('base64')
-        .replace(/\+/g, '-')
-        .replace(/\//g, '_')
-        .replace(/=+$/, '');
-  
-      // Sending the email using the Gmail API
-      const result = await gmail.users.messages.send({
-        userId: 'me',
-        requestBody: {
-          raw: encodedMessage,
-        },
-      });
-  
+
+      const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
       const newEmail = new Email({
-        sender: senderUser._id,
-        recipients,
-        subject,
-        body,
-        attachments,
-        status: 'sent',
+          sender: senderUser._id,
+          recipients,
+          subject,
+          body,
+          attachments,
+          status: "sent",
       });
       await newEmail.save();
-  
-      res.status(200).json({ 
-        message: 'Email sent successfully', 
-        email: newEmail, 
-        emailInfo: result.data 
+
+      const emailContent = recipients.map((recipient) => {
+        const pixel = `<img src="${process.env.BASE_URL.replace(/\/+$/, '')}/api/email/track?emailId=${newEmail._id}&recipient=${recipient}" alt="" width="1" height="1">`;
+        console.log(pixel);      
+          return [
+              `From: ${senderUser.email}`,
+              `To: ${recipient}`,
+              `Subject: ${subject}`,
+              "Content-Type: text/html; charset=UTF-8",
+              "",
+              `<html><body>${body}<br>${pixel}</body></html>`,
+          ].join("\n");
       });
-  
-    } catch (error) {
-      res.status(500).json({ message: 'Error sending email', error: error.message });
+
+      for (const content of emailContent) {
+          const encodedMessage = Buffer.from(content)
+              .toString("base64")
+              .replace(/\+/g, "-")
+              .replace(/\//g, "_")
+              .replace(/=+$/, "");
+
+          await gmail.users.messages.send({
+              userId: "me",
+              requestBody: {
+                  raw: encodedMessage,
+              },
+          });
+      }
+
+      for (const recipient of recipients) {
+          const emailLog = new EmailLogs({
+              emailId: newEmail._id,
+              recipient,
+              status: "delivered",
+          });
+          await emailLog.save();
+      }
+
+      res.status(200).json({
+          message: "Email sent successfully",
+          email: newEmail,
+      });
+  } catch (error) {
+      console.error("Error in sendEmail:", error);
+      res.status(500).json({ message: "Error sending email", error: error.message });
+  }
+};
+
+exports.trackEmail = async (req, res) => {
+  console.log("Hitttttttttttttttttttttttttttttt")
+  try {
+    const { emailId, recipient } = req.query;
+
+    if (!emailId || !recipient) {
+      return res.status(400).send('Missing emailId or recipient');
     }
-  };
-  
+
+    const log = await EmailLogs.findOneAndUpdate(
+      { emailId, recipient },
+      { status: 'opened', timestamp: new Date() },
+      { new: true }
+    );
+
+    if (!log) {
+      return res.status(404).send('Email log not found');
+    }
+
+    res.status(200).send('Email opened status updated');
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('Error tracking email');
+  }
+};
+
+
+
+
+
+
+
+
+
+
 
 exports.saveDraft = async(req,res) =>{
     try {
@@ -195,5 +315,6 @@ exports.getScheduledEmails = async (req, res) => {
   } catch (error) {
       res.status(500).json({ message: 'Error fetching scheduled emails', error });
   }
-};
+};    
+
 

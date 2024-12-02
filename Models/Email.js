@@ -6,7 +6,7 @@ const EmailSchema = new mongoose.Schema({
         ref: 'User', 
         required: true,
     },
-    recipients: [{
+    recipients: [{ 
         type: String, // List of recipient email addresses
         required: true,
     }],

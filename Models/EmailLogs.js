@@ -8,16 +8,16 @@ const EmailLogsSchema = new mongoose.Schema({
     },
     recipient: { 
         type: String, 
-        required: true 
+        required: true   
     },
     status: { 
         type: String, 
-        enum: ['delivered', 'opened', 'bounced', 'failed'], 
+        enum: ['delivered', 'opened'], 
         required: true 
     },
     timestamp: { 
         type: Date, 
-        default: Date.now, // When the status update occurred
+        default: Date.now, 
     },
 })
 
