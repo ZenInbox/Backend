@@ -7,7 +7,7 @@ const EmailSchema = new mongoose.Schema({
         required: true,
     },
     recipients: [{ 
-        type: String, // List of recipient email addresses
+        type: String,
         required: true,
     }],
     subject: {
@@ -19,8 +19,7 @@ const EmailSchema = new mongoose.Schema({
         required: true,
     },
     attachments: [{
-        filename: String, // Name of the file
-        filepath: String, // Path where the file is stored
+        type: String,
     }],
     status: {
     type: String,
