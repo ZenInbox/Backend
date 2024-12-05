@@ -147,7 +147,6 @@ exports.sendEmail = async (req, res) => {
 };
 
 
-
 exports.trackEmail = async (req, res) => {
   try {
     const { emailId, recipient } = req.query;
@@ -199,17 +198,26 @@ exports.saveDraft = async(req,res) =>{
 
 exports.getSentEmails = async (req, res) => {
   try {
-    const { senderEmail } = req.body;
+    const { senderEmail, page = 1, limit = 5 } = req.body; 
+
     const senderUser = await User.findOne({ email: senderEmail });
     if (!senderUser) {
-      return res.status(404).json({ message: 'Sender not found in database' });
+      return res.status(404).json({ message: "Sender not found in database" });
     }
-    const sentEmails = await Email.find({ sender: senderUser._id, status: 'sent' });
+
+    const sentEmails = await Email.find({ sender: senderUser._id, status: "sent" })
+      .sort({ createdAt: -1 }) 
+      .skip((page - 1) * limit) 
+      .limit(parseInt(limit));
+
     res.status(200).json(sentEmails);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching sent emails', error });
+    console.log(error);
+    res.status(500).json({ message: "Error fetching sent emails", error });
   }
 };
+
+
 
 exports.getDrafts = async (req, res) => {
   try {

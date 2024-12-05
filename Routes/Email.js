@@ -6,7 +6,7 @@ const {sendEmail , saveDraft ,  getSentEmails , getDrafts  ,scheduleEmail, getSc
 
 router.post("/send-email" , sendEmail);
 router.post('/save-draft', saveDraft);
-router.get('/sent', getSentEmails);
+router.post('/sent', getSentEmails);
 router.get('/drafts', getDrafts);
 router.post('/schedule-email', scheduleEmail);
 router.get('/scheduled', getScheduledEmails);
