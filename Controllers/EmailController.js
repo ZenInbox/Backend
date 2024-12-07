@@ -136,13 +136,18 @@ exports.trackEmail = async (req, res) => {
       return res.status(404).send('Email log not found');
     }
 
+    io.emit("status-update", {
+      emailId,
+      recipient,
+      status: 'opened',
+    });
+
     res.status(200).send('Email opened status updated');
   } catch (error) {
-    console.error(error);
+    console.error('Error in trackEmail:', error);
     res.status(500).send('Error tracking email');
   }
 };
-
 
 exports.getSentEmails = async (req, res) => {
   try {
@@ -167,7 +172,6 @@ exports.getSentEmails = async (req, res) => {
 
 
 
-
 exports.saveDraft = async(req,res) =>{
     try {
         const { sender, recipients, subject, body, attachments } = req.body;
@@ -189,9 +193,6 @@ exports.saveDraft = async(req,res) =>{
         res.status(500).json({ message: 'Error saving draft', error });
     }
 }
-
-
-
 
 exports.getDrafts = async (req, res) => {
   try {
@@ -389,4 +390,33 @@ exports.getScheduledEmails = async (req, res) => {
   }
 };    
 
+exports.getEmailLogs = async (req, res) => {
+  try {
+    const { senderEmail, page = 1, limit = 10 } = req.body;
 
+    if (!senderEmail) {
+      return res.status(400).json({ message: "Sender email is required" });
+    }
+
+    const senderUser = await User.findOne({ email: senderEmail });
+    if (!senderUser) {
+      return res.status(404).json({ message: "Sender not found in database" });
+    }
+
+    const emailIds = await Email.find({ sender: senderUser._id }).select("_id");
+
+    const emailLogs = await EmailLogs.find({ emailId: { $in: emailIds } })
+      .populate({
+        path: "emailId", 
+        select: "subject", 
+      })
+      .sort({ timestamp: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+
+    res.status(200).json(emailLogs);
+  } catch (error) {
+    console.error("Error fetching email logs:", error);
+    res.status(500).json({ message: "Error fetching email logs", error });
+  }
+};
