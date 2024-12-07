@@ -9,7 +9,14 @@ dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
-const io = socketIo(server);
+const io = socketIo(server, {
+    cors: {
+      origin: ["http://localhost:5173", "https://zeninboxs.pages.dev"], 
+      methods: ["GET", "POST"],
+      credentials: true,
+    },
+  });
+  
 
 app.use(cors({
     origin: ["http://localhost:5173" , "https://zeninboxs.pages.dev"],
