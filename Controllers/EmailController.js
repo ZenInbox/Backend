@@ -3,35 +3,6 @@ const ScheduledEmails = require('../Models/ScheduledEmails');
 const Email = require('../Models/Email');
 const EmailLogs = require("../Models/EmailLogs")
 const { google } = require("googleapis");
-const mongoose = require("mongoose")
-
-exports.trackEmail = async (req, res) => {
-  console.log("Hitttttttttttttttttttttttttttttt")
-  try {
-    const { emailId, recipient } = req.query;
-
-    if (!emailId || !recipient) {
-      return res.status(400).send('Missing emailId or recipient');
-    }
-
-    const log = await EmailLogs.findOneAndUpdate(
-      { emailId, recipient },
-      { status: 'opened', timestamp: new Date() },
-      { new: true }
-    );
-
-    if (!log) {
-      return res.status(404).send('Email log not found');
-    }
-
-    res.status(200).send('Email opened status updated');
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('Error tracking email');
-  }
-};
-
-
 
 exports.sendEmail = async (req, res) => {
   try {
@@ -173,29 +144,6 @@ exports.trackEmail = async (req, res) => {
 };
 
 
-
-exports.saveDraft = async(req,res) =>{
-    try {
-        const { sender, recipients, subject, body, attachments } = req.body;
-        const senderUser = await User.findOne({ email: sender });
-        if (!senderUser) {
-          return res.status(404).json({ message: 'Sender not found in database' });
-        }
-        const newEmail = new Email({
-            sender:senderUser._id,
-            recipients,
-            subject,
-            body,
-            attachments,
-            status: 'draft',
-        });
-        await newEmail.save();
-        res.status(200).json({ message: 'Draft saved successfully', email: newEmail });
-    } catch (error) {
-        res.status(500).json({ message: 'Error saving draft', error });
-    }
-}
-
 exports.getSentEmails = async (req, res) => {
   try {
     const { senderEmail, page = 1, limit = 5 } = req.body; 
@@ -219,19 +167,147 @@ exports.getSentEmails = async (req, res) => {
 
 
 
+
+exports.saveDraft = async(req,res) =>{
+    try {
+        const { sender, recipients, subject, body, attachments } = req.body;
+        const senderUser = await User.findOne({ email: sender });
+        if (!senderUser) {
+          return res.status(404).json({ message: 'Sender not found in database' });
+        }
+        const newEmail = new Email({
+            sender:senderUser._id,
+            recipients,
+            subject,
+            body,
+            attachments,
+            status: 'draft',
+        });
+        await newEmail.save();
+        res.status(200).json({ message: 'Draft saved successfully', email: newEmail });
+    } catch (error) {
+        res.status(500).json({ message: 'Error saving draft', error });
+    }
+}
+
+
+
+
 exports.getDrafts = async (req, res) => {
   try {
-    const { senderEmail } = req.body;
+    const { senderEmail, page = 1, limit = 5 } = req.body;
+
     const senderUser = await User.findOne({ email: senderEmail });
     if (!senderUser) {
-      return res.status(404).json({ message: 'Sender not found in database' });
+      return res.status(404).json({ message: 'Sender not found in the database' });
     }
-    const drafts = await Email.find({ sender: senderUser._id, status: 'draft' });
+
+    const drafts = await Email.find({ sender: senderUser._id, status: 'draft' })
+      .sort({ createdAt: -1 }) 
+      .skip((page - 1) * limit) 
+      .limit(parseInt(limit)); 
+
     res.status(200).json(drafts);
   } catch (error) {
-    res.status(500).json({ message: 'Error fetching drafts', error });
+    console.error(error);
+    res.status(500).json({ message: 'Error fetching drafts', error: error.message });
   }
 };
+
+
+exports.sendDraft = async (req, res) => {
+  try {
+    const { sender, recipients, subject, body, attachments, emailId, accessToken } = req.body;
+
+    const senderUser = await User.findOne({ email: sender });
+    if (!senderUser) {
+      return res.status(404).json({ message: "Sender not found in database" });
+    }
+
+    const draftEmail = await Email.findById(emailId);
+    if (!draftEmail || draftEmail.status !== "draft") {
+      return res.status(404).json({ message: "Draft not found or already sent" });
+    }
+
+    const oauth2Client = new google.auth.OAuth2(
+      process.env.CLIENT_ID,
+      process.env.CLIENT_SECRET
+    );
+    oauth2Client.setCredentials({ access_token: accessToken });
+    const gmail = google.gmail({ version: "v1", auth: oauth2Client });
+
+    const emailContent = recipients.map((recipient) => {
+      const pixel = `<img src="${process.env.BASE_URL.replace(/\/+$/, '')}/api/email/track?emailId=${emailId}&recipient=${recipient}" alt="" width="1" height="1">`;
+
+      const attachmentSection = attachments?.length
+        ? `
+            <p>Attachments:</p>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+              ${attachments
+                .map(
+                  (url) =>
+                    `<a href="${url}" target="_blank" style="padding: 10px 15px; background-color: #4CAF50; color: white; text-decoration: none; border-radius: 5px;">Download</a>`
+                )
+                .join('')}
+            </div>
+          `
+        : '';
+
+      return [
+        `From: ${senderUser.email}`,
+        `To: ${recipient}`,
+        `Subject: ${subject}`,
+        "Content-Type: text/html; charset=UTF-8",
+        "",
+        `
+          <html>
+            <body style="font-family: Arial, sans-serif; line-height: 1.6;">
+              <p>${body}</p>
+              ${attachmentSection}
+              ${pixel}
+            </body>
+          </html>
+        `,
+      ].join("\n");
+    });
+
+    for (const content of emailContent) {
+      const encodedMessage = Buffer.from(content)
+        .toString("base64")
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+
+      await gmail.users.messages.send({
+        userId: "me",
+        requestBody: {
+          raw: encodedMessage,
+        },
+      });
+    }
+
+    draftEmail.status = "sent";
+    await draftEmail.save();
+
+    for (const recipient of recipients) {
+      const emailLog = new EmailLogs({
+        emailId: draftEmail._id,
+        recipient,
+        status: "delivered",
+      });
+      await emailLog.save();
+    }
+
+    res.status(200).json({
+      message: "Email sent successfully",
+      email: draftEmail,
+    });
+  } catch (error) {
+    console.error("Error in sendDraft:", error);
+    res.status(500).json({ message: "Error sending email", error: error.message });
+  }
+};
+
 
 exports.scheduleEmail = async (req, res) => {
   try {
