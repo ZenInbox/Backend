@@ -17,7 +17,6 @@ const io = socketIo(server, {
     },
   });
   
-
 app.use(cors({
     origin: ["http://localhost:5173" , "https://zeninboxs.pages.dev"],
     methods: ['POST', 'DELETE', 'GET', 'PUT', 'PATCH'],
